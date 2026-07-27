@@ -8,7 +8,7 @@ import os, requests, zipfile
 from sqlalchemy import create_engine
 
 # ============================================================
-# DESIGN TOKENS — professional light theme
+# DESIGN TOKENS
 # ============================================================
 st.set_page_config(page_title="Ride-Hailing Analytics", layout="wide", page_icon="🚕")
 
@@ -33,9 +33,10 @@ html, body, [class*="css"] {{ font-family: 'Inter', sans-serif; }}
 [data-testid="stMetric"] {{
     background-color: {CARD};
     border: 1px solid {BORDER};
-    border-radius: 14px;
+    border-left: 4px solid {TEAL};
+    border-radius: 12px;
     padding: 16px 18px;
-    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
 }}
 [data-testid="stMetricLabel"] {{ color: {MUTED} !important; font-weight: 500; }}
 [data-testid="stMetricValue"] {{ color: {NAVY} !important; font-weight: 700; }}
@@ -48,16 +49,32 @@ div[data-testid="stPlotlyChart"] {{
     border: 1px solid {BORDER};
     border-radius: 14px;
     padding: 10px 8px 4px 8px;
-    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.05);
 }}
 
+/* Section header pill */
 .section-label {{
-    color: {MUTED}; font-size: 12px; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.06em;
-    margin: 18px 0 4px 2px;
+    display: inline-flex; align-items: center; gap: 6px;
+    background-color: {NAVY}; color: white;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    padding: 6px 14px; border-radius: 999px;
+    margin: 22px 0 10px 0;
 }}
+
+/* Stat highlight bar (top strip, like a product one-pager) */
+.stat-bar {{
+    display: flex; gap: 14px; margin: 4px 0 8px 0; flex-wrap: wrap;
+}}
+.stat-chip {{
+    background: linear-gradient(135deg, {NAVY} 0%, #2E3B5E 100%);
+    color: white; border-radius: 12px; padding: 10px 18px;
+    font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 8px;
+}}
+.stat-chip b {{ font-size: 15px; font-weight: 800; }}
+
 .dashboard-subtitle {{ color: {MUTED}; font-size: 15px; margin-top: -8px; }}
-hr {{ border-color: {BORDER} !important; margin: 8px 0 !important; }}
+hr {{ border-color: {BORDER} !important; margin: 6px 0 !important; }}
 </style>
 """, unsafe_allow_html=True)
 
@@ -75,6 +92,10 @@ def style_fig(fig, title, height=320, showlegend=False):
     return fig
 
 
+def section(icon, label):
+    st.markdown(f'<div class="section-label">{icon} &nbsp;{label}</div>', unsafe_allow_html=True)
+
+
 # ============================================================
 # DATA CONNECTION
 # ============================================================
@@ -84,12 +105,25 @@ engine = create_engine(db_url.replace("mysql://", "mysql+mysqlconnector://"))
 st.title("🚕 Ride-Hailing Analytics")
 st.markdown('<p class="dashboard-subtitle">Trip volume, revenue, demand patterns and geographic activity — full report</p>', unsafe_allow_html=True)
 
-# ---------------- KPI ROW ----------------
+# ---------------- CORE METRICS ----------------
 total_trips = pd.read_sql("SELECT COUNT(*) AS c FROM trips", engine).iloc[0]["c"]
 total_revenue = pd.read_sql("SELECT SUM(fare_amount) AS r FROM trips", engine).iloc[0]["r"]
 avg_fare = pd.read_sql("SELECT AVG(fare_amount) AS a FROM trips", engine).iloc[0]["a"]
 avg_duration = pd.read_sql("SELECT AVG(trip_duration_min) AS d FROM trips", engine).iloc[0]["d"]
+n_zones = pd.read_sql("SELECT COUNT(DISTINCT pickup_zone) AS z FROM trips", engine).iloc[0]["z"]
 
+# ---------------- STAT HIGHLIGHT BAR (product one-pager style) ----------------
+st.markdown(f"""
+<div class="stat-bar">
+    <div class="stat-chip">🚕 <b>{total_trips:,}</b>&nbsp;Trips Analyzed</div>
+    <div class="stat-chip">💰 <b>${total_revenue:,.0f}</b>&nbsp;Total Revenue</div>
+    <div class="stat-chip">📍 <b>{n_zones}</b>&nbsp;Zones Covered</div>
+    <div class="stat-chip">⏱️ <b>{avg_duration:,.1f} min</b>&nbsp;Avg Trip Time</div>
+    <div class="stat-chip">📈 <b>16</b>&nbsp;Visualizations</div>
+</div>
+""", unsafe_allow_html=True)
+
+# ---------------- KPI ROW ----------------
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Total Trips", f"{total_trips:,}")
 k2.metric("Total Revenue", f"${total_revenue:,.0f}")
@@ -99,7 +133,7 @@ k4.metric("Avg Trip Time", f"{avg_duration:,.1f} min")
 # ============================================================
 # ROW 1 — Revenue trend + 2 donuts
 # ============================================================
-st.markdown('<div class="section-label">Revenue & Trip Mix</div>', unsafe_allow_html=True)
+section("💰", "Revenue & Trip Mix")
 r1c1, r1c2, r1c3 = st.columns([2, 1, 1])
 
 with r1c1:
@@ -126,7 +160,7 @@ with r1c3:
 # ============================================================
 # ROW 2 — Hourly / Daily / Heatmap
 # ============================================================
-st.markdown('<div class="section-label">Demand Patterns</div>', unsafe_allow_html=True)
+section("⏱️", "Demand Patterns")
 r2c1, r2c2 = st.columns(2)
 
 with r2c1:
@@ -148,7 +182,7 @@ st.plotly_chart(style_fig(fig6, "Demand Heatmap: Hour vs Day", height=300), use_
 # ============================================================
 # ROW 3 — Revenue vs Volume, Scatter, Histogram
 # ============================================================
-st.markdown('<div class="section-label">Revenue Analysis</div>', unsafe_allow_html=True)
+section("📊", "Revenue Analysis")
 
 revenue = pd.read_sql("SELECT DATE(pickup_datetime) AS day, SUM(fare_amount) AS revenue, COUNT(*) AS trips FROM trips GROUP BY day ORDER BY day", engine)
 fig7 = go.Figure()
@@ -182,7 +216,7 @@ e2.metric("Avg Fare per Minute", f"${efficiency.iloc[0]['fare_per_min']}")
 # ============================================================
 # ROW 4 — Zones + Map
 # ============================================================
-st.markdown('<div class="section-label">Zones & Geographic Activity</div>', unsafe_allow_html=True)
+section("📍", "Zones & Geographic Activity")
 
 r4c1, r4c2 = st.columns(2)
 with r4c1:
@@ -198,7 +232,7 @@ with r4c2:
     fig11.update_layout(yaxis=dict(autorange="reversed", gridcolor=BORDER))
     st.plotly_chart(fig11, use_container_width=True)
 
-st.markdown('<div class="section-label">Pickup Demand Map</div>', unsafe_allow_html=True)
+section("🗺️", "Pickup Demand Map")
 
 @st.cache_data
 def load_zones():
